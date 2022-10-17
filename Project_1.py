@@ -10,7 +10,7 @@ from torch.nn import utils
 import matplotlib.pyplot as plt
 
 dt = 0.1 # s, time interval
-g = 9.81 # m/s^2, gravitational acceleration
+g = 0.12 # m/s^2? gravitational acceleration
 boost_a = 0.18 # m/s^2? thrust constant
 
 w = 0.25 # m, landing platform width
@@ -27,10 +27,12 @@ class Dynamics(nn.Module):
     def forward(state, action):
 
         # Apply gravity, put this as the second element in a tensor bc
-        delta_state_gravity = t.tensor([0., g * dt]) # m/s, speed change due to gravitational acceleration
+        delta_state_gravity = g * dt * t.tensor([0., 1.]) # m/s, speed change due to gravitational acceleration
+        # delta_state_gravity = t.tensor([0., g * dt]) # original eqn.
 
         # Thrust
-        delta_state = boost_a * dt * t.tensor([0., -1.]) * action # m/s, speed change due to thrust acceleration
+        delta_state = boost_a * dt * t.tensor([0., -1.]) * action # original eqn.
+
 
         # New velocity after considering gravity and thrust
         state = state + delta_state + delta_state_gravity
@@ -38,6 +40,7 @@ class Dynamics(nn.Module):
         # Update state
         step_mat = t.tensor([[1., dt], [0., 1.]])
         state = t.matmul(step_mat, state)
+        # print('State:', state, '\n Action:', action)
 
         return state
 
@@ -88,6 +91,9 @@ class Simulation(nn.Module):
 
     @staticmethod
     def initialize_state():
+        # x0 = float(np.random.rand(1))*5
+        # v0 = float(np.random.rand(1))
+
         state = [1., 0.]  # TODO: need batch of initial states
         return t.tensor(state, requires_grad=False).float()
 
@@ -120,9 +126,11 @@ class Optimize:
 
     def visualize(self):
         data = np.array([self.simulation.state_trajectory[i].detach().numpy() for i in range(self.simulation.T)])
-        x = data[:, 0]
-        y = data[:, 1]
+        x = data[:, 0] # position
+        y = data[:, 1] # velocity
         plt.plot(x, y)
+        plt.xlabel('Position, d(t)')
+        plt.ylabel('Velocity, v(t)')
         plt.show()
 
 
