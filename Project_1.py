@@ -135,8 +135,8 @@ class Optimize:
             epoch += 1
             loss = self.step()
             print('[%d] loss: %.6f' % (epoch + 1, loss))
-            if epoch % 5 == 0:
-                self.visualize(epoch)
+            # if epoch % 5 == 0:
+            self.visualize(epoch)
 
     def visualize(self, i):
         data = np.array([self.simulation.state_trajectory[i].detach().numpy() for i in range(self.simulation.T)])
@@ -150,12 +150,13 @@ class Optimize:
         plt.plot(y, v)
         plt.xlabel('Position, d(t)')
         plt.ylabel('Velocity, v(t)')
-        plt.title('iteration:'+str(i))
+        plt.title('gradient Descent Iteration: '+str(i))
         plt.subplot(212)
         plt.plot(theta, omega)
         plt.xlabel('Angular Position, \u03B8(t)') # printing greek letters: https://pythonforundergradengineers.com/unicode-characters-in-python.html
         plt.ylabel('Angular Velocity, \u03C9(t)')
         plt.subplots_adjust(hspace=0.3)
+        plt.savefig('.\\Results_Figures\\Step_'+str(i)+'.jpg', dpi=300, bbox_inches='tight')
         plt.show()
 
 
