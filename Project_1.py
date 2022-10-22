@@ -1,12 +1,8 @@
-import logging
-import math
-import random
+
 import numpy as np
-import time
 import torch as t
 import torch.nn as nn
 from torch import optim
-from torch.nn import utils
 import matplotlib.pyplot as plt
 
 dt = 0.1 # s, time interval
@@ -42,27 +38,26 @@ class Dynamics(nn.Module):
         # Update state
         step_mat = t.tensor([[1., dt, 0., 0.], [0., 1., 0., 0.], [0., 0., 1., dt], [0., 0., 0., 1.]])
         state = t.matmul(step_mat, state)
-        # print('State:', state, '\n Action:', action)
 
         return state
 
 
 class Controller(nn.Module):
 
-    def __init__(self, dim_input, dim_hidden, dim_output):
+    def __init__(self, dim_input, dim_hidden, dim_hidden2, dim_output):
         """
         dim_input: # of system states
         dim_output: # of actions
         dim_hidden: up to you
         """
-        dim_hidden2 = 4
+        # dim_hidden2 = dim_hidden/2+1
         super(Controller, self).__init__()
         self.network = nn.Sequential(
             nn.Linear(dim_input, dim_hidden),
             nn.Tanh(),
-            # nn.Linear(dim_hidden, dim_hidden2),
-            # nn.Mish(),
-            nn.Linear(dim_hidden, dim_output),
+            nn.Linear(dim_hidden, dim_hidden2),
+            nn.Mish(),
+            nn.Linear(dim_hidden2, dim_output),
             nn.Sigmoid()
         )
 
@@ -90,20 +85,19 @@ class Simulation(nn.Module):
             action = self.controller.forward(state)
             state = self.dynamics.forward(state, action)
             self.action_trajectory.append(action)
-            if _ == 80:
-                pass
             self.state_trajectory.append(state)
         return self.error(state)
 
     @staticmethod
     def initialize_state():
-        # y0 = float(np.random.rand(1))*5
-        # v0 = float(np.random.rand(1))
-        # theta0 = float(np.random.rand(1))
-        # omega0 = float(np.random.rand(1))
+        y0 = float(np.random.rand(1))*5 # this makes y0 = [0, 5]
+        v0 = float(np.random.rand(1))*-0.2 # this makes v0 = [-0.2, 0]
+        phi0 = float(np.random.rand(1))*2-1 # this makes phi0 = [-1, 1]
+        omega0 = float(np.random.rand(1))*2-1 # this makes omega0 = [-1, 1]
 
-        # state = [y0, v0, theta0, omega0]
-        state = [1., 0., 0.5, 0.]  # TODO: need batch of initial states
+        state = [y0, v0, phi0, omega0]
+        print('Initial state:', state)
+        # state = [1., 0., 0.5, 0.]
         return t.tensor(state, requires_grad=False).float()
 
     def error(self, state):
@@ -127,22 +121,23 @@ class Optimize:
         self.optimizer.step(closure)
         return closure()
 
-    def train(self, epochs, eps):
-        # for epoch in range(epochs):
+    def train(self, eps):
         loss = 1
         epoch = 0
-        while loss >= eps :
+        x0 = self.simulation.state
+        x0 = np.array(x0)
+        while loss >= eps and epoch < 200: # should solve in less than 200 steps
             epoch += 1
             loss = self.step()
             print('[%d] loss: %.6f' % (epoch + 1, loss))
-            # if epoch % 5 == 0:
-            self.visualize(epoch)
+        if loss <= eps: # only plot if it was a successful run
+            self.visualize(epoch, x0) # plot once it is converged (last gradient descent step)
 
-    def visualize(self, i):
+    def visualize(self, i, x0):
         data = np.array([self.simulation.state_trajectory[i].detach().numpy() for i in range(self.simulation.T)])
         y = data[:, 0] # position
         v = data[:, 1] # velocity
-        theta = data[:, 2] # angular position
+        phi = data[:, 2] # angular position
         omega = data[:, 3] # angular velocity
 
         plt.figure()
@@ -150,13 +145,13 @@ class Optimize:
         plt.plot(y, v)
         plt.xlabel('Position, d(t)')
         plt.ylabel('Velocity, v(t)')
-        plt.title('gradient Descent Iteration: '+str(i))
+        # plt.title('gradient Descent Iteration: '+str(i)+'\n'+'x0='+str(x0))
         plt.subplot(212)
-        plt.plot(theta, omega)
-        plt.xlabel('Angular Position, \u03B8(t)') # printing greek letters: https://pythonforundergradengineers.com/unicode-characters-in-python.html
+        plt.plot(phi, omega)
+        plt.xlabel('Angular Position, \u03A6(t)') # printing greek letters: https://pythonforundergradengineers.com/unicode-characters-in-python.html
         plt.ylabel('Angular Velocity, \u03C9(t)')
         plt.subplots_adjust(hspace=0.3)
-        plt.savefig('.\\Results_Figures\\Step_'+str(i)+'.jpg', dpi=300, bbox_inches='tight')
+        plt.savefig('.\\Results_Figures\\GD_step='+str(i)+'_x0='+str(x0)+'.jpg', dpi=300, bbox_inches='tight')
         plt.show()
 
 
@@ -164,13 +159,16 @@ class Optimize:
 eps = 1e-6
 T = 100  # number of time steps
 dim_input = 4  # state space dimensions
-dim_hidden = 3  # latent dimensions
+dim_hidden = 5  # latent dimensions
+dim_hidden2 = 3  # latent dimensions 2
 dim_output = 2  # action space dimensions
+
 d = Dynamics()  # define dynamics
-c = Controller(dim_input, dim_hidden, dim_output)  # define controller
-s = Simulation(c, d, T)  # define simulation
-o = Optimize(s)  # define optimizer
-o.train(40, eps)  # solve the optimization problem, take 40 gradient descent steps, could set another termination criteria
+for i in range(100): # test 100 different initial states
+    c = Controller(dim_input, dim_hidden, dim_hidden2, dim_output)  # define controller, need to call this to initialize a new initial state
+    s = Simulation(c, d, T)  # define simulation
+    o = Optimize(s)  # define optimizer
+    o.train(eps)  # solve the optimization problem
 
 
 
